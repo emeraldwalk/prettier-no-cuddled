@@ -19,11 +19,11 @@ Here's an example using `.prettierrc.js`, but other forms of providing options t
 ```javascript
 module.exports = {
   parser: "no-cuddled",
-  plugins: ["@emeraldwalk/prettier-plugin-no-cuddled"],
+  plugins: ["./node_modules/@emeraldwalk/prettier-plugin-no-cuddled"],
 }
 ```
 
-> NOTE: You can also copy the `src/plugin.js` file from this repo and set
+You can also copy the `src/plugin.js` file from this repo and set
 the path to the file in the `plugins` directory.
 
 ```javascript
@@ -32,3 +32,7 @@ module.exports = {
   plugins: ["./some-path/plugin.js"],
 };
 ```
+
+## Known Issues
+* Enabling this plugin disables Prettier on non-js / ts file extensions. This can possibly be worked around by using multiple config files, but it's likely that things like format on save will only work for 1 or the other for now.
+* catch / finally blocks with comments in front of them move the comments inside the block. Need to investigate this one.
