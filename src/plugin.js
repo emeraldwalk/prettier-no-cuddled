@@ -21,6 +21,12 @@ const plugin = {
        * override minimal parts.
        */
       parse(text, parsers, options) {
+        // TODO: delegate to other parsers to not lose support for non-js / ts
+        const isSupported = /\.(js|jsx|ts|tsx)$/.test(options.filepath || '')
+        if (!isSupported) {
+          throw Error(`${options.filepath} is not supported.`)
+        }
+
         const thisPrinter = findPluginPrinter(options.plugins, name);
         const estreePrinter = findPluginPrinter(options.plugins, "estree");
         const typescriptParser = findPluginParser(
