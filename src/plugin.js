@@ -1,7 +1,8 @@
-const prettier = require("prettier");
-const { hardline } = prettier.doc.builders;
+const prettier = require("prettier/")
 
-const name = "no-cuddled";
+const { hardline } = prettier.doc.builders
+
+const name = "no-cuddled"
 
 /**
  * This plugin is basically a thin wrapper around prettier's built in .js / .ts
@@ -20,48 +21,65 @@ const plugin = {
        * to re-use these for the heavy lifting, so we copy pieces of them and
        * override minimal parts.
        */
-      parse(text, parsers, options) {
-        // TODO: delegate to other parsers to not lose support for non-js / ts
-        const isSupported = /\.(js|jsx|ts|tsx)$/.test(options.filepath || '')
-        if (!isSupported) {
+      parse: function noCuddledParse(text, parsers, options) {
+        const fileInfo = prettier.getFileInfo.sync(options.filepath)
+
+        if (!fileInfo.inferredParser) {
           throw Error(`${options.filepath} is not supported.`)
         }
 
-        const thisPrinter = findPluginPrinter(options.plugins, name);
-        const estreePrinter = findPluginPrinter(options.plugins, "estree");
-        const typescriptParser = findPluginParser(
-          options.plugins,
-          "typescript"
-        );
+        const useThisPlugin = fileInfo.inferredParser === 'typescript' || fileInfo.inferredParser === 'babel'
 
-        // attach typescript parser props such as locStart & locEnd to options
-        // so that it can be used in the print function below
-        Object.assign(options, typescriptParser, {
-          astFormat: name,
-          // There are some things that check for this in the estree printer
-          // that impact things like dangling commas in generic type parameters,
-          // so we want to override the no-cuddled parser name.
-          parser: "typescript",
-        });
+        // We should be done with our custom parser name, so set it to the
+        // underlying parser we will use. This is important since some some
+        // printers may reference this to determine how things were parsed.
+        options.parser = useThisPlugin
+          ? 'typescript'
+          : fileInfo.inferredParser
 
-        // copy estree printer properties onto our printer
-        // (except for our implementation of print)
-        Object.assign(thisPrinter, estreePrinter, { print: thisPrinter.print });
+        const inferredParser = findPluginParser(options.plugins, options.parser)
 
-        return parsers.typescript(text, parsers, options);
+        // attach props from inferredParser
+        Object.assign(options, inferredParser)
+        options.astFormat = useThisPlugin ? name : inferredParser.astFormat
+
+        // this typically happens in some normalization logic inside of the
+        // core parse function, but since our parser is still marked as
+        // 'no-cuddled' at that point, we have to handle after the fact.
+        if (options.parser === 'json') {
+          options.trailingComma = "none"
+        }
+
+        if (!useThisPlugin) {
+          return parsers[options.parser](text, parsers, options)
+        }
+
+        const thisPrinter = findPluginPrinter(options.plugins, name)
+        const estreePrinter = findPluginPrinter(options.plugins, 'estree')
+
+        // copy estree printer properties onto our printer and then re-apply our
+        // print function
+        Object.assign(thisPrinter, estreePrinter, { print: thisPrinter.print })
+
+        return parsers.typescript(text, parsers, options)
       },
     },
   },
   printers: {
     [name]: {
-      print(path, options, print, args) {
-        // use estree parser for standard parsing
-        const estreePrinter = findPluginPrinter(options.plugins, "estree");
-        const result = estreePrinter.print(path, options, print, args);
+      print: function noCuddledPrint(path, options, print, args) {
+        if (options.astFormat !== name) {
+          const printer = findPluginPrinter(options.plugins, options.astFormat)
+          return printer.print(path, options, print, args)
+        }
 
-        const node = path.getValue();
+        // use estree parser for standard parsing
+        const estreePrinter = findPluginPrinter(options.plugins, "estree")
+        const result = estreePrinter.print(path, options, print, args)
+
+        const node = path.getValue()
         if (!node) {
-          return result;
+          return result
         }
 
         // replace the leading space in front of the else with a newline
@@ -71,36 +89,36 @@ const plugin = {
           result.parts[0].parts[1] === " " &&
           result.parts[0].parts[2] === "else"
         ) {
-          result.parts[0].parts[1] = hardline;
+          result.parts[0].parts[1] = hardline
         }
         else if (node.type === "TryStatement" && result.parts[0]) {
           // If a catch block is present, it will be an object.
           // Otherwise an empty string
-          const catchBlock = result.parts[0].parts[2];
+          const catchBlock = result.parts[0].parts[2]
 
           // If a finally block is present, it will be an object.
           // Otherwise an empty string
-          const finallyBlock = result.parts[0].parts[3];
+          const finallyBlock = result.parts[0].parts[3]
 
           // replace leading space in front of catch with newline
           if (catchBlock && catchBlock.parts[0] === " ") {
-            catchBlock.parts[0] = hardline;
+            catchBlock.parts[0] = hardline
           }
 
           // replace leading space in front of finally with newline
           if (finallyBlock && finallyBlock.parts[0] === " finally ") {
-            finallyBlock.parts[0] = "finally ";
-            finallyBlock.parts.unshift(hardline);
+            finallyBlock.parts[0] = "finally "
+            finallyBlock.parts.unshift(hardline)
           }
         }
 
-        return result;
+        return result
       },
     },
   },
-};
+}
 
-module.exports = plugin;
+module.exports = plugin
 
 /**
  * Find parser in list of plugins.
@@ -108,8 +126,8 @@ module.exports = plugin;
 function findPluginParser(plugins, parserName) {
   const plugin = plugins.find(
     (plugin) => plugin.parsers && plugin.parsers[parserName]
-  );
-  return plugin.parsers[parserName];
+  )
+  return plugin.parsers[parserName]
 }
 
 /**
@@ -118,6 +136,6 @@ function findPluginParser(plugins, parserName) {
 function findPluginPrinter(plugins, printerName) {
   const plugin = plugins.find(
     (plugin) => plugin.printers && plugin.printers[printerName]
-  );
-  return plugin.printers[printerName];
+  )
+  return plugin.printers[printerName]
 }
